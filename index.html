@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChatGPT Playground</title>
+  <style>
+    .message {
+      margin-bottom: 10px;
+    }
+    textarea {
+      width: 100%;
+      height: 60px;
+      margin-bottom: 10px;
+    }
+    button {
+      display: block;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+<!-- https://unpkg.com/browse/vue/dist/ -->
+
+  <script src="https://unpkg.com/vue@3.4.29/dist/vue.global.js"></script>
+  
+  <script defer>
+    
+    const { createApp, ref, onMounted } = Vue;
+
+    const ChatGPTPlayground = {
+      
+template: `
+        <div>
+          
+          <h1>VueJS ChatGPT Playground (minimal)</h1>
+          
+          <div v-for="(msg, index) in messages" :key="index" class="message">
+            <p><b>{{ msg.role.toUpperCase() }}:</b></p>{{ msg.content }}<br /><br />
+          </div>
+          
+          <textarea data-id="prompt" v-model="userMessage" placeholder="Type your message here"></textarea>
+          
+          <button @click="sendMessage">Send</button>
+          
+        </div>
+      `,
+      
+setup() {
+        
+        const model = "gpt-4o"; // "gpt-3.5-turbo";
+        
+        const messages = ref([
+{ role: "system", content: "VueJS chatbot via OpenAI API direct access: you are an expert at something.\n\nLet's think step by step." }
+]);
+        
+        const userMessage = ref("");
+
+        const loadApiKey = () => {
+          let apiKey = localStorage.getItem("apiKey");
+
+          if (!apiKey) {
+            apiKey = prompt("Please enter your OpenAI API key: (will be kept in localStorage only)");
+            if (apiKey) {
+              localStorage.setItem("apiKey", apiKey);
+            }
+          }
+
+          return apiKey;
+        };
+
+        const callChatApi = async (message) => {
+          
+          const apiKey = loadApiKey();
+
+          if (!apiKey) return;
+
+          const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+              model,
+              messages: message
+            })
+          });
+
+          if (!response.ok) {
+            localStorage.removeItem("apiKey");
+            alert("API call failed; please verify your API key is correct.");
+            return;
+          };
+
+          const data = await response.json();
+          
+          return data.choices[0].message;
+          
+        };
+
+        const sendMessage = async () => {
+          if (!userMessage.value.trim()) return;
+
+          messages.value.push({ role: "user", content: userMessage.value });
+
+          const botReply = await callChatApi(messages.value);
+
+          if (botReply) {
+            messages.value.push(botReply);
+          }
+
+          userMessage.value = "";
+          setTimeout( () => document.querySelector('[data-id]').focus(), 40);
+          
+        };
+
+        onMounted(() => {
+          loadApiKey();
+        });
+
+        return {
+          messages,
+          userMessage,
+          sendMessage
+        };
+        
+      }
+      
+    };
+
+    createApp(ChatGPTPlayground).mount("#app");
+    
+document.title = document.querySelector("h1").innerText;
+    
+  </script>
+  
+</body>
+</html>
