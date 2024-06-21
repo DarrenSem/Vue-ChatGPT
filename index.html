@@ -3,8 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ChatGPT Playground</title>
+  <title>ChatGPT Playground (starting up)</title>
   <style>
+    .byline {
+      font-family: Verdana;
+      font-size: 80%;
+      padding-bottom: 0.7rem;
+    }
+    pre {
+      margin-bottom: 3rem;
+    }
     .message {
       margin-bottom: 10px;
     }
@@ -31,6 +39,17 @@
   
   <script defer>
     
+    let elPrompt, elSend;
+
+    const PROCESSING = "Processing...";
+    const setPlaceholder = processing => {
+      elPrompt.setAttribute( "placeholder", processing ? PROCESSING : elPrompt.dataset.placeholder );
+      elSend.disabled = !!processing;
+      setTimeout( () => elPrompt.focus(), 40 );
+    };
+
+    const q = (sel, root) => (root || document).querySelector(sel ?? null);
+
     const { createApp, ref, onMounted } = Vue;
     const { createPinia, defineStore } = Pinia;
 
@@ -39,15 +58,24 @@
 template: `
         <div>
           
-          <h1>VueJS+Pinia ChatGPT Playground (minimal)</h1>
+          <h1>
+          VueJS+Pinia chatbot Playground (minimal) via OpenAI API direct access</h1>
+          <p class="byline">A toy program by <a href="https://darrensem.github.io/Vue-ChatGPT/">Darren Semotiuk</a></p>
           
           <div v-for="(msg, index) in chat.messages" :key="index" class="message">
-            <p><b>{{ msg.role.toUpperCase() }}:</b></p>{{ msg.content }}<br /><br />
+            <p><b>{{ msg.role.toUpperCase() }}:</b></p>
+            <pre>{{ msg.content }}</pre>
           </div>
           
-          <textarea data-id="prompt" v-model="chat.userMessage" placeholder="Type your message here"></textarea>
+          <textarea
+            data-prompt="prompt" v-model="chat.userMessage"
+            @keydown="chat.handleCTRLkey"
+            data-placeholder="Enter user message...
+
+[CTRL]+[UP/DOWN] for prompt history"
+          ></textarea>
           
-          <button @click="chat.sendMessage">Send</button>
+          <button title="[CTRL]+[ENTER] to send" data-send="send" @click="chat.sendMessage">Send</button>
           
         </div>
       `,
@@ -57,6 +85,11 @@ setup() {
 
         onMounted(() => {
           chat.loadApiKey();
+          document.title = q("h1").innerText;
+
+          elPrompt = q('[data-prompt="prompt"]');
+          elSend = q('[data-send="send"]');
+          setPlaceholder(!"processing");
         });
 
         return { chat };
@@ -70,10 +103,12 @@ setup() {
         model: "gpt-4o", // "gpt-3.5-turbo";
 
         messages: [
-{ role: "system", content: "VueJS chatbot via OpenAI API direct access: you are an expert at something.\n\nLet's think step by step." }
+{ role: "system", content: "You are an expert at XYZ (context defined later).\nLet's think step by step.\n\nXYZ context is defined as" }
 ],
 
-        userMessage: ""
+        userMessage: "",
+
+        historyIndex: null,
 
       }),
 
@@ -127,14 +162,48 @@ setup() {
 
           this.messages.push({ role: "user", content: this.userMessage });
 
+          this.userMessage = "";
+          this.historyIndex = null;
+
+          setPlaceholder(!!"processing");
           const botReply = await this.callChatApi(this.messages);
+          setPlaceholder(!"processing");
 
           if (botReply) {
             this.messages.push(botReply);
           }
 
-          this.userMessage = "";
-          setTimeout( () => document.querySelector('[data-id]').focus(), 40);
+        },
+
+        handleCTRLkey(event) {
+          if (!event.ctrlKey) return;
+          // if (elPrompt.getAttribute("placeholder") === PROCESSING) return;
+
+          if (event.key === "Enter") {
+            event.preventDefault();
+            elSend.click();
+          };
+
+          if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+
+            event.preventDefault();
+
+            const rotateHistory = offset => {
+
+              const userPrompts = this.messages.reduce( (acc, el, i) => ( i % 2 && acc.push(el), acc ), [] );
+              const L = userPrompts.length;
+              if(!L) return;
+
+              const prev = this.historyIndex ?? (offset < 0 ? L : -1);
+              const next = ( prev + offset + L ) % L;
+              const userPrompt = userPrompts[next];
+              this.userMessage = userPrompt.content;
+              this.historyIndex = next;
+            };
+
+            rotateHistory( event.key === "ArrowUp" ? -1 : 1 );
+
+          };
 
         }
 
@@ -144,9 +213,7 @@ setup() {
 
     const pinia = createPinia();
     createApp(ChatGPTPlayground).use(pinia).mount("#app");
-    
-document.title = document.querySelector("h1").innerText;
-    
+
   </script>
   
 </body>
