@@ -26,39 +26,60 @@
 
   <script src="https://unpkg.com/vue@3.4.29/dist/vue.global.js"></script>
   
+  <script src="https://unpkg.com/vue-demi@0.14.8/lib/index.iife.js"></script>
+  <script src="https://unpkg.com/pinia@2.1.7/dist/pinia.iife.js"></script>
+  
   <script defer>
     
     const { createApp, ref, onMounted } = Vue;
+    const { createPinia, defineStore } = Pinia;
 
     const ChatGPTPlayground = {
       
 template: `
         <div>
           
-          <h1>VueJS ChatGPT Playground (minimal)</h1>
+          <h1>VueJS+Pinia ChatGPT Playground (minimal)</h1>
           
-          <div v-for="(msg, index) in messages" :key="index" class="message">
+          <div v-for="(msg, index) in chat.messages" :key="index" class="message">
             <p><b>{{ msg.role.toUpperCase() }}:</b></p>{{ msg.content }}<br /><br />
           </div>
           
-          <textarea data-id="prompt" v-model="userMessage" placeholder="Type your message here"></textarea>
+          <textarea data-id="prompt" v-model="chat.userMessage" placeholder="Type your message here"></textarea>
           
-          <button @click="sendMessage">Send</button>
+          <button @click="chat.sendMessage">Send</button>
           
         </div>
       `,
       
 setup() {
-        
-        const model = "gpt-4o"; // "gpt-3.5-turbo";
-        
-        const messages = ref([
-{ role: "system", content: "VueJS chatbot via OpenAI API direct access: you are an expert at something.\n\nLet's think step by step." }
-]);
-        
-        const userMessage = ref("");
+        const chat = useChatStore();
 
-        const loadApiKey = () => {
+        onMounted(() => {
+          chat.loadApiKey();
+        });
+
+        return { chat };
+      }
+    };
+
+    const useChatStore = defineStore('chat', {
+
+      state: () => ({
+
+        model: "gpt-4o", // "gpt-3.5-turbo";
+
+        messages: [
+{ role: "system", content: "VueJS chatbot via OpenAI API direct access: you are an expert at something.\n\nLet's think step by step." }
+],
+
+        userMessage: ""
+
+      }),
+
+      actions: {
+
+        async loadApiKey() {
           let apiKey = localStorage.getItem("apiKey");
 
           if (!apiKey) {
@@ -69,11 +90,11 @@ setup() {
           }
 
           return apiKey;
-        };
+        },
 
-        const callChatApi = async (message) => {
-          
-          const apiKey = loadApiKey();
+        async callChatApi(message) {
+
+          const apiKey = await this.loadApiKey();
 
           if (!apiKey) return;
 
@@ -84,7 +105,7 @@ setup() {
               "Authorization": `Bearer ${apiKey}`
             },
             body: JSON.stringify({
-              model,
+              model: this.model,
               messages: message
             })
           });
@@ -99,39 +120,30 @@ setup() {
           
           return data.choices[0].message;
           
-        };
+        },
 
-        const sendMessage = async () => {
-          if (!userMessage.value.trim()) return;
+        async sendMessage() {
+          if (!this.userMessage.trim()) return;
 
-          messages.value.push({ role: "user", content: userMessage.value });
+          this.messages.push({ role: "user", content: this.userMessage });
 
-          const botReply = await callChatApi(messages.value);
+          const botReply = await this.callChatApi(this.messages);
 
           if (botReply) {
-            messages.value.push(botReply);
+            this.messages.push(botReply);
           }
 
-          userMessage.value = "";
+          this.userMessage = "";
           setTimeout( () => document.querySelector('[data-id]').focus(), 40);
-          
-        };
 
-        onMounted(() => {
-          loadApiKey();
-        });
+        }
 
-        return {
-          messages,
-          userMessage,
-          sendMessage
-        };
-        
-      }
-      
-    };
+      } // actions: {
 
-    createApp(ChatGPTPlayground).mount("#app");
+    }); // const useChatStore = defineStore('chat', {
+
+    const pinia = createPinia();
+    createApp(ChatGPTPlayground).use(pinia).mount("#app");
     
 document.title = document.querySelector("h1").innerText;
     
